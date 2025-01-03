@@ -1,5 +1,5 @@
 # Stage 1: Build environment
-FROM node:18-alpine AS builder
+FROM node:23-alpine AS builder
 
 # Build arguments for environment configuration
 ARG BUILD_VERSION
