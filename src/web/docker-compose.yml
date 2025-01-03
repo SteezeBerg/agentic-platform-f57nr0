@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      target: development
+      args:
+        NODE_VERSION: '18-alpine'
+        USER_ID: '1000'
+        GROUP_ID: '1000'
+    image: agent-builder-hub-web-dev
+    container_name: agent-builder-web-dev
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=${API_URL}
+      - VITE_AWS_REGION=${AWS_REGION}
+      - VITE_COGNITO_USER_POOL_ID=${USER_POOL_ID}
+      - VITE_COGNITO_CLIENT_ID=${USER_POOL_WEB_CLIENT_ID}
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_EDITOR=code
+      - VITE_PORT=3000
+      - VITE_HOST=0.0.0.0
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+        consistency: cached
+      - type: volume
+        source: node_modules
+        target: /app/node_modules
+      - type: bind
+        source: ./.ssl
+        target: /app/.ssl
+        read_only: true
+      - type: tmpfs
+        target: /tmp
+      - type: tmpfs
+        target: /home/node/.npm
+    ports:
+      - "3000:3000" # Development server
+      - "9229:9229" # Debug port
+      - "443:443"   # HTTPS
+    command: npm run dev
+    user: "node"
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=unconfined
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/node/.npm
+    ulimits:
+      nproc: 100
+      nofile:
+        soft: 32768
+        hard: 32768
+    deploy:
+      resources:
+        limits:
+          memory: 1GB
+          cpus: '0.5'
+    networks:
+      - agent-builder-network
+
+networks:
+  agent-builder-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: agent-net
+      com.docker.network.driver.mtu: '1500'
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+    enable_ipv6: true
+    internal: false
+
+volumes:
+  node_modules:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/node_modules
+      o: bind
+
+secrets:
+  ssl_cert:
+    file: ./.ssl/cert.pem
+  ssl_key:
+    file: ./.ssl/key.pem
