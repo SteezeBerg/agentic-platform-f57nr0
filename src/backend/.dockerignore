@@ -1,0 +1,93 @@
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+
+# Test and coverage
+**/.coverage*
+**/htmlcov/
+**/coverage.xml
+**/.tox/
+
+# Build and distribution
+**/*.egg-info/
+**/dist/
+**/build/
+**/.eggs/
+
+# Security and credentials
+**/*.key
+**/*.pem
+**/*.p12
+**/*_rsa*
+**/.env*
+**/credentials/
+**/.aws/
+**/*.cert
+**/*.crt
+**/*.pfx
+**/secrets/
+
+# Development and IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+**/*.log
+**/.DS_Store
+**/*.swp
+**/*.swo
+**/*~
+
+# Documentation and non-essential
+**/docs/
+**/*.md
+**/README*
+**/CHANGELOG*
+**/LICENSE*
+
+# Docker
+.docker/
+docker-compose*.yml
+Dockerfile*
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+virtualenv/
+
+# Temporary files
+**/tmp/
+**/temp/
+**/*.tmp
+**/*.temp
+
+# Debug files
+**/*.debug
+**/debug/
+**/debug.log
+
+# Local development
+local_settings.py
+development_settings.py
+test_settings.py
+
+# Dependencies
+node_modules/
+bower_components/
+
+# Database
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Backup files
+**/*.bak
+**/*.backup
+**/*-backup
+
+# System files
+**/.directory
+**/Thumbs.db
