@@ -1,0 +1,112 @@
+name: Web CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['src/web/**']
+  pull_request:
+    branches: [main, develop]
+    paths: ['src/web/**']
+
+env:
+  NODE_VERSION: '18.x'
+  WORKING_DIRECTORY: 'src/web'
+  HUSKY: '0'
+
+jobs:
+  quality-checks:
+    name: Quality and Security Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'src/web/package-lock.json'
+
+      - name: Install Dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm ci --audit
+
+      - name: Type Check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run lint
+
+      - name: Security Audit
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm audit
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+  test-and-build:
+    name: Test and Build
+    needs: [quality-checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'src/web/package-lock.json'
+
+      - name: Install Dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm ci
+
+      - name: Test
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run test:ci
+        env:
+          CI: true
+          JEST_JUNIT_OUTPUT_DIR: './reports/junit/'
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: ${{ env.WORKING_DIRECTORY }}/reports/junit/
+
+      - name: Build
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: ${{ env.WORKING_DIRECTORY }}/dist
+          retention-days: 7
+
+      - name: Cache Build
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.WORKING_DIRECTORY }}/dist
+          key: ${{ runner.os }}-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-build-
