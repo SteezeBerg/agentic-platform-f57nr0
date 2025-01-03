@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    
+    <!-- Theme configuration -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    
+    <!-- Primary meta tags -->
+    <meta name="description" content="Agent Builder Hub - Enterprise platform for AI agent creation and management">
+    <meta name="format-detection" content="telephone=no">
+    
+    <!-- Open Graph meta tags -->
+    <meta property="og:title" content="Agent Builder Hub">
+    <meta property="og:description" content="Enterprise platform for AI agent creation and management">
+    <meta property="og:type" content="website">
+    
+    <!-- Security headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.amazonaws.com; style-src 'self' 'unsafe-inline' https://*.amazonaws.com; img-src 'self' data: https://*.amazonaws.com; font-src 'self' data: https://*.amazonaws.com; connect-src 'self' https://*.amazonaws.com wss://*.amazonaws.com; frame-ancestors 'none';">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()">
+    
+    <!-- Performance optimizations -->
+    <link rel="preconnect" href="https://cognito-idp.us-west-2.amazonaws.com">
+    <link rel="preconnect" href="https://api.agentbuilder.hakkoda.io">
+    <link rel="dns-prefetch" href="https://cognito-idp.us-west-2.amazonaws.com">
+    <link rel="dns-prefetch" href="https://api.agentbuilder.hakkoda.io">
+    
+    <!-- Critical resources -->
+    <link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="modulepreload" href="./src/index.tsx">
+    
+    <title>Agent Builder Hub</title>
+    
+    <!-- Skip to main content link for accessibility -->
+    <style>
+        .skip-to-main {
+            position: absolute;
+            left: -9999px;
+            z-index: 999;
+            padding: 1em;
+            background-color: white;
+            color: black;
+            text-decoration: none;
+        }
+        .skip-to-main:focus {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-to-main">Skip to main content</a>
+    
+    <div id="root" 
+         role="application" 
+         aria-label="Agent Builder Hub"
+         data-theme="light"
+         data-color-mode="auto">
+        <noscript>
+            <div style="font-family: system-ui, -apple-system, sans-serif; padding: 2rem; text-align: center;">
+                You need to enable JavaScript to run this application.
+            </div>
+        </noscript>
+        <div id="initial-loader"
+             aria-label="Loading application"
+             style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+            <!-- Initial loading state -->
+        </div>
+    </div>
+    
+    <!-- Application entry point -->
+    <script type="module" src="./src/index.tsx"></script>
+</body>
+</html>
