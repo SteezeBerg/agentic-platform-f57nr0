@@ -104,7 +104,7 @@ jobs:
           retention-days: 7
 
       - name: Cache Build
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ env.WORKING_DIRECTORY }}/dist
           key: ${{ runner.os }}-build-${{ github.sha }}

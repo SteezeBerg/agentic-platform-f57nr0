@@ -52,7 +52,7 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Cache Terraform
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.terraform.d/plugin-cache
@@ -96,7 +96,7 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Cache Terraform
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.terraform.d/plugin-cache
