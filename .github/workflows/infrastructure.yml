@@ -1,0 +1,198 @@
+name: Infrastructure Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure/terraform/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infrastructure/terraform/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: 'Target deployment environment'
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  deployments: write
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: '1.5.0'
+  AWS_REGION: 'us-west-2'
+  TF_INPUT: '0'
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Cache Terraform
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            .terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Initialize Terraform
+        run: |
+          terraform init -backend=false
+        working-directory: infrastructure/terraform
+
+      - name: Validate Terraform configurations
+        run: |
+          terraform validate
+        working-directory: infrastructure/terraform
+
+  plan:
+    name: Plan Infrastructure Changes
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+    environment: ${{ matrix.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-${{ matrix.environment }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Cache Terraform
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            .terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Initialize Terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=agentbuilder-tfstate-${{ matrix.environment }}" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infrastructure/terraform/environments/${{ matrix.environment }}
+
+      - name: Plan Terraform Changes
+        id: plan
+        run: |
+          terraform plan \
+            -input=false \
+            -detailed-exitcode \
+            -out=tfplan \
+            -var-file=../../environments/${{ matrix.environment }}/terraform.tfvars
+        working-directory: infrastructure/terraform/environments/${{ matrix.environment }}
+        continue-on-error: true
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v3
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: infrastructure/terraform/environments/${{ matrix.environment }}/tfplan
+          retention-days: 1
+
+      - name: Update Pull Request
+        if: github.event_name == 'pull_request'
+        run: |
+          PLAN=$(terraform show -no-color tfplan)
+          echo "### Terraform Plan for ${{ matrix.environment }} :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        working-directory: infrastructure/terraform/environments/${{ matrix.environment }}
+
+  apply:
+    name: Apply Infrastructure Changes
+    needs: plan
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+    environment:
+      name: ${{ matrix.environment }}
+      url: https://${{ matrix.environment != 'prod' && format('{0}.', matrix.environment) || '' }}agentbuilder.hakkoda.io
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-${{ matrix.environment }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v3
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: infrastructure/terraform/environments/${{ matrix.environment }}
+
+      - name: Initialize Terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=agentbuilder-tfstate-${{ matrix.environment }}" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infrastructure/terraform/environments/${{ matrix.environment }}
+
+      - name: Apply Terraform Changes
+        run: |
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            tfplan
+        working-directory: infrastructure/terraform/environments/${{ matrix.environment }}
+
+      - name: Update Deployment Status
+        if: success()
+        run: |
+          echo "### Infrastructure Deployment Successful :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+          echo "Environment: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment URL: https://${{ matrix.environment != 'prod' && format('{0}.', matrix.environment) || '' }}agentbuilder.hakkoda.io" >> $GITHUB_STEP_SUMMARY
