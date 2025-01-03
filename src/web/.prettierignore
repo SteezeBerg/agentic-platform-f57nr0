@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/**
+
+# Build outputs
+build/**
+dist/**
+
+# Test coverage
+coverage/**
+
+# Configuration files
+*.config.js
+*.config.ts
+vite-env.d.ts
+
+# Source maps
+**/*.js.map
+**/*.css.map
+
+# TypeScript declarations
+**/*.d.ts
+
+# Package files
+package.json
+package-lock.json
+
+# Documentation
+*.md
+
+# Git
+.git/**
+
+# Static assets
+public/**
