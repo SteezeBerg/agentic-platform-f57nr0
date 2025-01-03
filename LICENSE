@@ -1,0 +1,121 @@
+AGENT BUILDER HUB ENTERPRISE LICENSE AGREEMENT
+Version 1.0.0 (2024)
+© Hakkoda. All Rights Reserved.
+
+1. COPYRIGHT NOTICE
+
+This software, known as the Agent Builder Hub ("Software"), including all associated artificial intelligence technologies, methodologies, algorithms, knowledge base integration systems, enterprise connectors, and documentation, is the exclusive intellectual property of Hakkoda ("Company"). All rights reserved worldwide.
+
+2. LICENSE TERMS
+
+2.1. Grant of License
+Subject to the terms and conditions of this Agreement, Company grants a non-transferable, non-exclusive, revocable license to use the Software within Licensee's internal enterprise operations.
+
+2.2. Restrictions
+Licensee shall NOT:
+a) Redistribute, sublicense, lease, rent, or loan the Software
+b) Modify, decompile, reverse engineer, or disassemble the Software
+c) Extract, copy, or repurpose any AI models, training data, or algorithms
+d) Remove or alter any proprietary notices or marks
+e) Use the Software outside of authorized enterprise environments
+f) Transfer any rights granted under this Agreement
+
+2.3. AI Technology Protection
+The Software's artificial intelligence components, including but not limited to:
+- Agent creation methodologies
+- Knowledge integration systems
+- RAG processing mechanisms
+- Model orchestration frameworks
+are proprietary trade secrets and may not be analyzed, extracted, or repurposed.
+
+3. COMPLIANCE REQUIREMENTS
+
+3.1. SOC 2 Type II Compliance
+Licensee must maintain SOC 2 Type II controls for:
+- Security
+- Availability
+- Processing Integrity
+- Confidentiality
+- Privacy
+
+3.2. GDPR Compliance
+Licensee shall:
+a) Implement privacy by design (Article 25)
+b) Maintain records of processing activities
+c) Ensure lawful basis for AI processing
+d) Honor data subject rights
+e) Report breaches within 72 hours
+
+3.3. HIPAA Security Rule
+When processing healthcare data:
+a) Implement required security measures
+b) Maintain audit trails
+c) Enforce access controls
+d) Encrypt protected health information
+e) Execute business associate agreements
+
+3.4. ISO 27001:2013
+Maintain certified information security management system (ISMS) covering:
+- Risk assessment
+- Security controls
+- Incident management
+- Continuous improvement
+
+3.5. PCI DSS v4.0
+For payment card data:
+a) Maintain secure network architecture
+b) Protect cardholder data
+c) Implement strong access controls
+d) Regular security testing
+e) Information security policy maintenance
+
+4. DATA PROTECTION
+
+4.1. Security Requirements
+Licensee must implement:
+a) Enterprise-grade encryption (AES-256)
+b) Secure key management
+c) Access control systems
+d) Security monitoring
+e) Incident response procedures
+
+4.2. Enterprise Integration Security
+For integrated systems (Mavenlink, Lever, Rippling, etc.):
+a) Secure API implementations
+b) Credential protection
+c) Data transmission encryption
+d) Access logging
+e) Regular security audits
+
+4.3. Audit Requirements
+- Quarterly compliance audits
+- Annual security assessments
+- Continuous monitoring
+- Incident reporting
+- Change tracking
+
+5. WARRANTY DISCLAIMER
+
+5.1. Limited Warranty
+The Software is provided "as is" without warranty of any kind, either express or implied.
+
+5.2. Limitation of Liability
+Company shall not be liable for any damages arising from the use or inability to use the Software.
+
+6. TERM AND TERMINATION
+
+6.1. This Agreement is effective until terminated.
+6.2. Company may terminate immediately for compliance violations.
+6.3. Upon termination, Licensee must cease all use and destroy all copies.
+
+7. GOVERNING LAW
+
+This Agreement shall be governed by the laws of the jurisdiction where Company is registered.
+
+8. ACKNOWLEDGMENT
+
+By using the Software, Licensee acknowledges reading and agreeing to these terms.
+
+Last Updated: 2024
+Review Frequency: Annual
+Compliance Audit Frequency: Quarterly
