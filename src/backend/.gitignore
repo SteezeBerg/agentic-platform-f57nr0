@@ -1,0 +1,152 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment and credentials
+.env*
+.venv/
+env/
+ENV/
+.aws/
+secrets/
+*.pem
+*.key
+
+# Dependencies and package management
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+*.egg
+dist/
+build/
+wheels/
+
+# Testing and coverage
+.coverage*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+test-reports/
+.ruff_cache/
+.pytype/
+.dmypy.json
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Containerization
+.docker/
+*.dockerfile
+docker-compose.override.yml
+
+# Logs and temporary data
+logs/
+*.log
+local_data/
+tmp/
+profile_default/
+
+# C extensions
+*.c
+*.h
+*.o
+*.dll
+*.dylib
+
+# Documentation builds
+docs/_build/
+site/
+
+# Local development
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Poetry
+poetry.lock
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# VS Code workspace settings
+*.code-workspace
+.history/
+
+# AWS SAM
+.aws-sam/
+
+# Serverless
+.serverless/
+node_modules/
+
+# Environment directories
+.python-version
+.ruby-version
+.node-version
+.nvmrc
+
+# Database
+*.sqlite3
+*.db
+
+# Backup files
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
