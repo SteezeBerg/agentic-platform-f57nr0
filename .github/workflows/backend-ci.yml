@@ -1,0 +1,227 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/backend/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/backend/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.11'
+  COVERAGE_THRESHOLD: 90
+  DOCKER_BUILDKIT: 1
+  SECURITY_ALERTS_CHANNEL: security-alerts
+
+jobs:
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('src/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/backend/requirements.txt
+
+      - name: Run black code formatter
+        run: |
+          black --check --config src/backend/pyproject.toml src/backend/src
+
+      - name: Run isort import sorter
+        run: |
+          isort --check-only --settings-path src/backend/pyproject.toml src/backend/src
+
+      - name: Run flake8 linter
+        run: |
+          flake8 src/backend/src
+
+      - name: Run mypy type checker
+        run: |
+          mypy --config-file src/backend/pyproject.toml src/backend/src
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('src/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/backend/requirements.txt
+
+      - name: Run pytest with coverage
+        run: |
+          pytest src/backend/tests \
+            --cov=src/backend/src \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=${{ env.COVERAGE_THRESHOLD }} \
+            -n auto \
+            --reruns 2
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      - name: Verify coverage meets threshold
+        run: |
+          coverage_value=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(float(root.attrib['line-rate']) * 100)")
+          if (( $(echo "$coverage_value < ${{ env.COVERAGE_THRESHOLD }}" | bc -l) )); then
+            echo "Coverage ($coverage_value%) is below threshold (${{ env.COVERAGE_THRESHOLD }}%)"
+            exit 1
+          fi
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety trivy-scanner
+
+      - name: Run Bandit security scanner
+        run: |
+          bandit -r src/backend/src -f sarif -o security-report.sarif
+
+      - name: Run safety dependency check
+        run: |
+          safety check -r src/backend/requirements.txt --json --full-report > dependency-check.json
+
+      - name: Run trivy vulnerability scan
+        run: |
+          trivy fs --format sarif --output fs-scan.sarif src/backend
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            security-report.sarif
+            dependency-check.json
+            fs-scan.sarif
+
+      - name: Check for critical vulnerabilities
+        run: |
+          if grep -q "CRITICAL\|HIGH" security-report.sarif; then
+            echo "Critical security vulnerabilities found!"
+            exit 1
+          fi
+
+  build:
+    name: Build Docker Image
+    needs: [code-quality, test, security-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/backend
+          file: src/backend/Dockerfile
+          push: false
+          load: true
+          tags: agent-builder-hub-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image build
+        run: |
+          docker image inspect agent-builder-hub-backend:${{ github.sha }}
+
+      - name: Scan container image
+        run: |
+          trivy image --format sarif --output container-scan.sarif agent-builder-hub-backend:${{ github.sha }}
+
+      - name: Upload container scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: container-scan
+          path: container-scan.sarif
+
+  notify:
+    name: Send Notifications
+    needs: [code-quality, test, security-scan, build]
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Notify on failure
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const message = `CI Pipeline failed for commit ${context.sha}
+            Workflow: ${context.workflow}
+            Repository: ${context.repo.owner}/${context.repo.repo}
+            See: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `CI Pipeline Failure - ${new Date().toISOString()}`,
+              body: message,
+              labels: ['ci-failure', 'urgent']
+            });
