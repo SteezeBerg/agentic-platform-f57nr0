@@ -1,0 +1,173 @@
+name: Web CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/web/**'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18.x'
+  WORKING_DIRECTORY: 'src/web'
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+  DEPLOYMENT_TIMEOUT: '900'
+  HEALTH_CHECK_GRACE_PERIOD: '120'
+  MONITORING_PERIOD: '300'
+
+concurrency:
+  group: web-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.1.1'
+
+      - name: Build and tag Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --build-arg NODE_ENV=production \
+            --build-arg API_URL=${{ secrets.API_URL }} \
+            --build-arg AWS_REGION=${{ env.AWS_REGION }} \
+            $WORKING_DIRECTORY
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Scan container for vulnerabilities
+        uses: aquasecurity/trivy-action@v1
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --key ${{ secrets.COSIGN_PRIVATE_KEY }} ${{ steps.build-image.outputs.image }}
+
+      - name: Push image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEFINITION }} \
+            --query taskDefinition > task-definition.json
+
+      - name: Update task definition
+        id: task-def
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          jq --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            '.containerDefinitions[0].image = $IMAGE' \
+            task-definition.json > new-task-definition.json
+          aws ecs register-task-definition \
+            --cli-input-json file://new-task-definition.json
+          echo "taskArn=$(aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_DEFINITION }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)" >> $GITHUB_OUTPUT
+
+      - name: Start blue/green deployment
+        id: deploy
+        run: |
+          DEPLOYMENT_ID=$(aws ecs create-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition ${{ steps.task-def.outputs.taskArn }} \
+            --deployment-configuration "deploymentType=BLUE_GREEN,blueGreenDeploymentConfiguration={deploymentReadyOption={actionOnTimeout=STOP_DEPLOYMENT,waitTimeInMinutes=5},terminateBlueTasksOnDeploymentSuccess={action=TERMINATE,terminationWaitTimeInMinutes=5}}" \
+            --query 'service.deployments[0].id' \
+            --output text)
+          echo "deploymentId=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+
+      - name: Monitor deployment health
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --max-wait-time $DEPLOYMENT_TIMEOUT
+
+      - name: Verify deployment success
+        run: |
+          DEPLOYMENT_STATUS=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].deployments[?id==`${{ steps.deploy.outputs.deploymentId }}`].status' \
+            --output text)
+          if [ "$DEPLOYMENT_STATUS" != "PRIMARY" ]; then
+            echo "Deployment failed with status: $DEPLOYMENT_STATUS"
+            exit 1
+          fi
+
+      - name: Update deployment metrics
+        if: always()
+        run: |
+          aws cloudwatch put-metric-data \
+            --namespace "AgentBuilderHub/WebDeployments" \
+            --metric-name "DeploymentDuration" \
+            --value ${{ steps.deploy.outputs.duration }} \
+            --unit Seconds \
+            --dimensions Service=$ECS_SERVICE,Environment=production
+
+      - name: Notify deployment status
+        if: always()
+        uses: aws-actions/aws-sns-publish@v1
+        with:
+          topic-arn: ${{ secrets.SNS_TOPIC_ARN }}
+          message: |
+            Deployment Status: ${{ job.status }}
+            Service: Web Frontend
+            Environment: Production
+            Image: ${{ steps.build-image.outputs.image }}
+            Deployment ID: ${{ steps.deploy.outputs.deploymentId }}
