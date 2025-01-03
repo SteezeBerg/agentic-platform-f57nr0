@@ -1,0 +1,176 @@
+name: Backend CD
+
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: 'Deployment environment'
+        required: true
+        options:
+          - staging
+          - production
+      version:
+        type: string
+        description: 'Version tag for deployment'
+        required: true
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: agent-builder-backend
+  DOCKER_BUILDKIT: 1
+  DEPLOYMENT_TIMEOUT: 900
+  HEALTH_CHECK_INTERVAL: 30
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-staging
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Scan container for vulnerabilities
+        uses: aquasecurity/trivy-action@v1
+        with:
+          image: ${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.version || github.sha }}
+          severity: 'CRITICAL,HIGH'
+          exit-code: 1
+          ignore-unfixed: true
+          
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from ${{ env.ECR_REPOSITORY }}:latest \
+            -t ${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.version || github.sha }} \
+            -f infrastructure/docker/backend.dockerfile .
+          docker push ${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.version || github.sha }}
+          
+      - name: Initialize monitoring
+        run: |
+          chmod +x ./infrastructure/scripts/monitoring.sh
+          ./infrastructure/scripts/monitoring.sh setup_monitoring staging
+          
+      - name: Deploy to ECS staging
+        run: |
+          chmod +x ./infrastructure/scripts/deploy.sh
+          ./infrastructure/scripts/deploy.sh \
+            deploy_backend \
+            staging \
+            ${{ github.event.inputs.version || github.sha }} \
+            --cluster staging-cluster \
+            --service backend-service \
+            --min-healthy-percent 100 \
+            --max-percent 200 \
+            --health-check-grace 45s
+            
+      - name: Verify deployment health
+        run: |
+          ./infrastructure/scripts/deploy.sh check_health staging backend-service
+          
+      - name: Update monitoring dashboards
+        run: |
+          ./infrastructure/scripts/monitoring.sh update_dashboards staging
+
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: 
+      name: production
+      url: https://api.agent-builder.hakkoda.io
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-production
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Verify image signatures
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          docker pull ${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.version || github.sha }}
+          docker verify ${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.version || github.sha }}
+          
+      - name: Initialize production monitoring
+        run: |
+          chmod +x ./infrastructure/scripts/monitoring.sh
+          ./infrastructure/scripts/monitoring.sh setup_monitoring production
+          
+      - name: Deploy to ECS production
+        run: |
+          chmod +x ./infrastructure/scripts/deploy.sh
+          ./infrastructure/scripts/deploy.sh \
+            deploy_backend \
+            production \
+            ${{ github.event.inputs.version || github.sha }} \
+            --cluster production-cluster \
+            --service backend-service \
+            --min-healthy-percent 100 \
+            --max-percent 200 \
+            --health-check-grace 60s \
+            --requires-approval true
+            
+      - name: Progressive traffic shift
+        run: |
+          for i in {0..100..10}; do
+            aws ecs update-service \
+              --cluster production-cluster \
+              --service backend-service \
+              --desired-count $((i * desired_count / 100))
+            sleep 30
+          done
+          
+      - name: Verify production health
+        run: |
+          ./infrastructure/scripts/deploy.sh check_health production backend-service
+          
+      - name: Monitor application metrics
+        run: |
+          ./infrastructure/scripts/monitoring.sh \
+            --environment production \
+            --metrics "cpu_utilization,memory_utilization,error_rate,response_time" \
+            --threshold-duration 300
+            
+      - name: Update deployment status
+        if: always()
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            aws ssm put-parameter \
+              --name "/agent-builder/production/deployment-status" \
+              --value "success" \
+              --type "String" \
+              --overwrite
+          else
+            ./infrastructure/scripts/deploy.sh rollback production backend-service ${{ github.event.inputs.version || github.sha }}
+          fi
