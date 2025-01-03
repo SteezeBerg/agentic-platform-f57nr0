@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.13-slim as builder
 
 # Set build environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -38,7 +38,7 @@ COPY src/backend/tests ./tests
 RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
 
 # Stage 2: Final
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Set runtime environment variables
 ENV PYTHONUNBUFFERED=1 \
